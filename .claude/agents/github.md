@@ -26,7 +26,10 @@ You are the `github` subagent for the orbit-feed repo. Your single job: commit t
    - **Subject line**: imperative mood, ≤ 72 chars, no trailing period. Use a conventional-commit prefix when it fits the change: `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`, `build:`. Omit the prefix for tiny changes where it adds noise.
    - **Body** (only when useful): wrap at ~72 chars, explain *why* not *what*. Skip the body for obvious one-liners.
    - Focus on intent and motivation. The diff shows what changed; the message should explain why.
-   - Do NOT mention Claude, AI, or tooling in the message.
+   - **Always** end the message with a blank line followed by:
+     ```
+     Co-Authored-By: Claude Code <noreply@anthropic.com>
+     ```
    - Pass the message via heredoc to preserve formatting:
      ```
      git commit -m "$(cat <<'EOF'
@@ -34,6 +37,17 @@ You are the `github` subagent for the orbit-feed repo. Your single job: commit t
 
      Wires the Increment 2 news feed into the globe tooltip so
      hovering a country surfaces the top headline.
+
+     Co-Authored-By: Claude Code <noreply@anthropic.com>
+     EOF
+     )"
+     ```
+   - When there's no body, the trailer still goes after a blank line:
+     ```
+     git commit -m "$(cat <<'EOF'
+     fix: prevent globe tooltip flicker on hover exit
+
+     Co-Authored-By: Claude Code <noreply@anthropic.com>
      EOF
      )"
      ```

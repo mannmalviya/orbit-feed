@@ -37,6 +37,6 @@ Read `.claude/PLAN.md` for the incremental roadmap. This file is for *how* we wo
   - Imperative subject ≤ 72 chars, no trailing period.
   - Conventional-commit prefix when it fits (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`, `build:`); omit for tiny changes.
   - Body explains *why*, not *what* — and only when the subject isn't enough.
-  - Never mention Claude, AI, or tooling in the message.
+  - Always end with a blank line + `Co-Authored-By: Claude Code <noreply@anthropic.com>` trailer.
 - Never force-push, never `--no-verify`, never `--amend` a pushed commit. Fix hook failures at the root and make a new commit.
 - Stage specific paths (`git add src/foo.ts`), not `git add -A`. Never stage `.env*`, credentials, `dist/`, or `node_modules/`.
