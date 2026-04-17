@@ -89,8 +89,11 @@ function countryName(f: CountryFeature): string {
   return (p.ADMIN as string) ?? p.NAME ?? p.name ?? 'Unknown'
 }
 
+type OrbitControlsLike = { autoRotate: boolean; autoRotateSpeed: number }
+
 export default function GlobeView({ onCountryClick }: Props) {
   const globeRef = useRef<GlobeMethods | undefined>(undefined)
+  const cleanupRotate = useRef<(() => void) | null>(null)
   const [countries, setCountries] = useState<CountryFeature[]>([])
   const [hovered, setHovered] = useState<CountryFeature | null>(null)
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight })
@@ -159,6 +162,32 @@ export default function GlobeView({ onCountryClick }: Props) {
     [hovered],
   )
 
+  // ── Auto-rotate ───────────────────────────────────────────────────────────
+
+  function handleGlobeReady() {
+    const controls = globeRef.current?.controls() as OrbitControlsLike | undefined
+    const canvas = globeRef.current?.renderer()?.domElement
+    if (!controls || !canvas) return
+
+    controls.autoRotate = true
+    controls.autoRotateSpeed = 0.4
+
+    const pause = () => { controls.autoRotate = false }
+    const resume = () => { controls.autoRotate = true }
+
+    canvas.addEventListener('pointerdown', pause)
+    canvas.addEventListener('pointerup', resume)
+    canvas.addEventListener('pointercancel', resume)
+
+    cleanupRotate.current = () => {
+      canvas.removeEventListener('pointerdown', pause)
+      canvas.removeEventListener('pointerup', resume)
+      canvas.removeEventListener('pointercancel', resume)
+    }
+  }
+
+  useEffect(() => () => cleanupRotate.current?.(), [])
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -166,6 +195,7 @@ export default function GlobeView({ onCountryClick }: Props) {
       ref={globeRef}
       width={size.w}
       height={size.h}
+      onGlobeReady={handleGlobeReady}
       backgroundColor="#000010"
       globeMaterial={globeMaterial}
       atmosphereColor="lightskyblue"
