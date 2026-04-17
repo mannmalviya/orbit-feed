@@ -30,10 +30,25 @@ Read `.claude/PLAN.md` for the incremental roadmap. This file is for *how* we wo
 
 ## Git workflow
 
-- Use the `github` subagent (`.claude/agents/github.md`) to commit and push. Don't hand-roll `git commit` / `git push` in the main thread — delegate so the commit-message rules stay consistent.
+- Use the `github` subagent (`.claude/agents/github.md`) to commit, push, and manage branches. Don't hand-roll git commands in the main thread — delegate so rules stay consistent.
 - Invoke it at these checkpoints: after finishing an increment, after a standalone fix/refactor, or whenever the user says "commit and push" / "push this".
 - Don't commit speculative or half-finished work. If a change isn't ready, leave it uncommitted.
-- Commit message rules (enforced by the subagent):
+- **Each increment lives on its own branch.** Never commit feature work directly to `main`.
+- Merge to `main` via PR only (use `gh pr create`). Don't `git merge` locally.
+
+### Branch naming
+- Pattern: `<type>/<short-kebab-description>`
+- Types mirror conventional-commit prefixes: `feat`, `fix`, `refactor`, `chore`, `docs`
+- Keep the description ≤ 4 words, all lowercase, hyphens only (no slashes or dots inside)
+- Examples:
+  - `feat/news-panel` — new feature increment
+  - `fix/terminator-longitude-offset` — bug fix
+  - `chore/upgrade-three` — dependency bump
+  - `refactor/globe-view-split` — internal cleanup
+- Branch off `main` unless you're stacking on an existing feature branch
+- Delete the branch after the PR is merged
+
+### Commit message rules
   - Imperative subject ≤ 72 chars, no trailing period.
   - Conventional-commit prefix when it fits (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`, `build:`); omit for tiny changes.
   - Body explains *why*, not *what* — and only when the subject isn't enough.
