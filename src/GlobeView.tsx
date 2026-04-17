@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Globe, { type GlobeMethods } from 'react-globe.gl'
 import * as THREE from 'three'
 import type { SelectedCountry } from './types'
+import type { PlanetName } from './solarSystem'
+import { densityColor, densityAltitude } from './populationData'
+import { AIRPORTS, ROUTES } from './flightData'
+import { createSolarSystem, type SolarSystemHandle } from './solarSystem'
 
 type CountryFeature = {
   type: 'Feature'
@@ -21,6 +25,25 @@ type CountriesGeoJSON = {
 
 type Props = {
   onCountryClick: (country: SelectedCountry) => void
+  showDensity: boolean
+  showFlights: boolean
+  lockedPlanet: PlanetName | null
+}
+
+type ArcDatum = {
+  startLat: number
+  startLng: number
+  endLat: number
+  endLng: number
+  /** ms for one full dash cycle — varies per route for visual variety */
+  animateTime: number
+  /** [0,1] offset so dashes start staggered, not all at origin simultaneously */
+  initialGap: number
+}
+
+type RingDatum = {
+  lat: number
+  lng: number
 }
 
 const COUNTRIES_URL =
@@ -89,11 +112,29 @@ function countryName(f: CountryFeature): string {
   return (p.ADMIN as string) ?? p.NAME ?? p.name ?? 'Unknown'
 }
 
-type OrbitControlsLike = { autoRotate: boolean; autoRotateSpeed: number }
+type OrbitControlsLike = {
+  autoRotate: boolean
+  autoRotateSpeed: number
+  maxDistance: number
+  minDistance: number
+  target: THREE.Vector3
+  update(): void
+}
 
-export default function GlobeView({ onCountryClick }: Props) {
-  const globeRef = useRef<GlobeMethods | undefined>(undefined)
-  const cleanupRotate = useRef<(() => void) | null>(null)
+// Arc colour: medium cyan → near-white, giving a "comet trail" gradient
+const ARC_COLORS: [string, string] = [
+  'rgba(80, 210, 255, 0.75)',
+  'rgba(220, 245, 255, 0.95)',
+]
+
+// Ring colour function: bright cyan fading to transparent as ring expands
+const ringColor = () => (t: number) => `rgba(80, 220, 255, ${Math.max(0, 1 - t * 1.4)})`
+
+export default function GlobeView({ onCountryClick, showDensity, showFlights, lockedPlanet }: Props) {
+  const globeRef        = useRef<GlobeMethods | undefined>(undefined)
+  const cleanupRotate   = useRef<(() => void) | null>(null)
+  const solarSystemRef  = useRef<SolarSystemHandle | null>(null)
+  const [globeReady, setGlobeReady] = useState(false)
   const [countries, setCountries] = useState<CountryFeature[]>([])
   const [hovered, setHovered] = useState<CountryFeature | null>(null)
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight })
@@ -157,36 +198,183 @@ export default function GlobeView({ onCountryClick }: Props) {
   }, [])
 
   const capColor = useMemo(
-    () => (f: object) =>
-      f === hovered ? 'rgba(120, 180, 255, 0.6)' : 'rgba(80, 120, 200, 0.25)',
-    [hovered],
+    () => (f: object) => {
+      const feature = f as CountryFeature
+      const iso2 = (feature.properties.ISO_A2 as string | undefined) ?? ''
+      if (showDensity) {
+        return f === hovered
+          ? densityColor(iso2, 1.0)
+          : densityColor(iso2, 0.78)
+      }
+      return f === hovered ? 'rgba(120, 180, 255, 0.6)' : 'rgba(80, 120, 200, 0.25)'
+    },
+    [hovered, showDensity],
   )
+
+  const polygonAlt = useMemo(
+    () => (f: object) => {
+      const feature = f as CountryFeature
+      const iso2 = (feature.properties.ISO_A2 as string | undefined) ?? ''
+      const base = showDensity ? densityAltitude(iso2) : 0.006
+      return f === hovered ? base + 0.02 : base
+    },
+    [hovered, showDensity],
+  )
+
+  // ── Flight arcs & airport rings ───────────────────────────────────────────
+
+  const arcObjects = useMemo((): ArcDatum[] => {
+    if (!showFlights) return []
+    const total = ROUTES.length
+    return ROUTES
+      .filter(([from, to]) => AIRPORTS[from] && AIRPORTS[to])
+      .map(([from, to], i) => ({
+        startLat: AIRPORTS[from].lat,
+        startLng: AIRPORTS[from].lng,
+        endLat:   AIRPORTS[to].lat,
+        endLng:   AIRPORTS[to].lng,
+        // Spread animation times 3 500–7 000 ms so routes don't all move in sync
+        animateTime: 3_500 + (i % 8) * 500,
+        // Stagger starting position across [0, 1] so dashes aren't all at origin
+        initialGap: i / total,
+      }))
+  }, [showFlights])
+
+  const ringObjects = useMemo((): RingDatum[] => {
+    if (!showFlights) return []
+    // One ring per unique airport that appears in at least one active route
+    const used = new Set(ROUTES.flat())
+    return Object.entries(AIRPORTS)
+      .filter(([code]) => used.has(code))
+      .map(([, { lat, lng }]) => ({ lat, lng }))
+  }, [showFlights])
 
   // ── Auto-rotate ───────────────────────────────────────────────────────────
 
   function handleGlobeReady() {
     const controls = globeRef.current?.controls() as OrbitControlsLike | undefined
-    const canvas = globeRef.current?.renderer()?.domElement
-    if (!controls || !canvas) return
+    const canvas   = globeRef.current?.renderer()?.domElement
+    const camera   = globeRef.current?.camera() as THREE.PerspectiveCamera | undefined
 
-    controls.autoRotate = true
-    controls.autoRotateSpeed = 0.4
-
-    const pause = () => { controls.autoRotate = false }
-    const resume = () => { controls.autoRotate = true }
-
-    canvas.addEventListener('pointerdown', pause)
-    canvas.addEventListener('pointerup', resume)
-    canvas.addEventListener('pointercancel', resume)
-
-    cleanupRotate.current = () => {
-      canvas.removeEventListener('pointerdown', pause)
-      canvas.removeEventListener('pointerup', resume)
-      canvas.removeEventListener('pointercancel', resume)
+    // ── Extend camera frustum for solar system distances ──────────────────
+    if (camera) {
+      // Neptune geocentric max ≈ 32 AU × 2 348 500 = ~75 M units; far = 100 M is safe
+      camera.near = 0.5
+      camera.far  = 100_000_000
+      camera.updateProjectionMatrix()
     }
+
+    if (controls) {
+      controls.autoRotate      = true
+      controls.autoRotateSpeed = 0.4
+      // Allow zooming from inside Earth's atmosphere to just beyond Neptune's orbit
+      controls.minDistance = 101
+      controls.maxDistance = 80_000_000
+    }
+
+    if (canvas && controls) {
+      const pause  = () => { controls.autoRotate = false }
+      const resume = () => { controls.autoRotate = true }
+      canvas.addEventListener('pointerdown',  pause)
+      canvas.addEventListener('pointerup',    resume)
+      canvas.addEventListener('pointercancel', resume)
+      cleanupRotate.current = () => {
+        canvas.removeEventListener('pointerdown',   pause)
+        canvas.removeEventListener('pointerup',     resume)
+        canvas.removeEventListener('pointercancel', resume)
+      }
+    }
+
+    setGlobeReady(true)
   }
 
   useEffect(() => () => cleanupRotate.current?.(), [])
+
+  // ── Solar system ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!globeReady) return
+    const scene = globeRef.current?.scene()
+    if (!scene) return
+
+    const ss = createSolarSystem(scene)
+    solarSystemRef.current = ss
+
+    // Update planet positions once per second (orbital motion is slow but keeps
+    // positions accurate across long sessions and day-changes)
+    const id = setInterval(() => ss.update(new Date()), 1_000)
+
+    return () => {
+      clearInterval(id)
+      ss.dispose()
+      solarSystemRef.current = null
+    }
+  }, [globeReady])
+
+  // ── Planet locking ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!lockedPlanet || !globeRef.current || !solarSystemRef.current) return
+
+    const maybeControls = globeRef.current.controls() as OrbitControlsLike | undefined
+    const maybeCamera = globeRef.current.camera() as THREE.PerspectiveCamera | undefined
+
+    if (!maybeControls || !maybeCamera) return
+
+    const controls = maybeControls as OrbitControlsLike
+    const camera = maybeCamera as THREE.PerspectiveCamera
+
+    function updateCameraForPlanet() {
+      const planetPos = solarSystemRef.current!.getPlanetPosition(lockedPlanet!)
+      if (!planetPos) return
+
+      // Fixed camera distance that shows the solar system well
+      const cameraDistance = 50000 // Far enough to see planets clearly
+
+      // Position camera at a fixed distance from origin, looking toward the planet
+      const cameraPos = new THREE.Vector3(0, 0, cameraDistance)
+      
+      // Look at the planet
+      controls.target.copy(planetPos)
+      camera.position.copy(cameraPos)
+      controls.update()
+    }
+
+    // Update camera every frame
+    const id = setInterval(updateCameraForPlanet, 16)
+
+    // Disable auto-rotate and re-enable zoom
+    const wasAutoRotating = controls.autoRotate
+    const wasMinDistance = controls.minDistance
+    const wasMaxDistance = controls.maxDistance
+    controls.autoRotate = false
+    controls.minDistance = 1 // Allow very close zoom
+    controls.maxDistance = 100_000_000 // Allow very far zoom
+
+    return () => {
+      clearInterval(id)
+      controls.autoRotate = wasAutoRotating
+      controls.minDistance = wasMinDistance
+      controls.maxDistance = wasMaxDistance
+    }
+  }, [lockedPlanet])
+
+  // ── Reset view when unlocking planet ───────────────────────────────────────
+  useEffect(() => {
+    if (lockedPlanet !== null || !globeRef.current) return
+
+    const maybeControls = globeRef.current.controls() as OrbitControlsLike | undefined
+    const maybeCamera = globeRef.current.camera() as THREE.PerspectiveCamera | undefined
+
+    if (!maybeControls || !maybeCamera) return
+
+    // Reset to Earth-centered view with auto-rotate re-enabled
+    const controls = maybeControls as OrbitControlsLike
+    const camera = maybeCamera as THREE.PerspectiveCamera
+    
+    controls.target.set(0, 0, 0)
+    camera.position.set(0, 0, 150)
+    controls.autoRotate = true
+    controls.update()
+  }, [lockedPlanet])
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -201,7 +389,7 @@ export default function GlobeView({ onCountryClick }: Props) {
       atmosphereColor="lightskyblue"
       atmosphereAltitude={0.15}
       polygonsData={countries}
-      polygonAltitude={(f: object) => (f === hovered ? 0.02 : 0.006)}
+      polygonAltitude={polygonAlt}
       polygonCapColor={capColor}
       polygonSideColor={() => 'rgba(0, 80, 180, 0.15)'}
       polygonStrokeColor={() => '#111'}
@@ -215,6 +403,27 @@ export default function GlobeView({ onCountryClick }: Props) {
         const iso2 = (feature.properties.ISO_A2 as string | undefined) ?? ''
         onCountryClick({ name: countryName(feature), iso2 })
       }}
+      // ── Flight arcs ──────────────────────────────────────────────────────
+      arcsData={arcObjects}
+      arcStartLat={(d) => (d as ArcDatum).startLat}
+      arcStartLng={(d) => (d as ArcDatum).startLng}
+      arcEndLat={(d)   => (d as ArcDatum).endLat}
+      arcEndLng={(d)   => (d as ArcDatum).endLng}
+      arcColor={() => ARC_COLORS}
+      arcAltitudeAutoScale={0.28}
+      arcStroke={0.4}
+      arcDashLength={0.28}
+      arcDashGap={0.72}
+      arcDashInitialGap={(d) => (d as ArcDatum).initialGap}
+      arcDashAnimateTime={(d) => (d as ArcDatum).animateTime}
+      // ── Airport rings ─────────────────────────────────────────────────────
+      ringsData={ringObjects}
+      ringLat={(d) => (d as RingDatum).lat}
+      ringLng={(d) => (d as RingDatum).lng}
+      ringColor={ringColor}
+      ringMaxRadius={2.5}
+      ringPropagationSpeed={2.5}
+      ringRepeatPeriod={900}
     />
   )
 }

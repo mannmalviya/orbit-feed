@@ -1,0 +1,129 @@
+/* ─── Container ─────────────────────────────────────────────────────────── */
+
+.density-widget {
+  background: rgba(10, 14, 26, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  padding: 12px 16px;
+  min-width: 210px;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.density-widget--on {
+  border-color: rgba(100, 180, 255, 0.22);
+  background: rgba(10, 14, 26, 0.9);
+}
+
+/* ─── Toggle row ─────────────────────────────────────────────────────────── */
+
+.density-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.density-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a9ab8;
+  transition: color 0.2s;
+}
+
+.density-widget--on .density-label {
+  color: #c0d4f0;
+}
+
+/* ─── Switch ─────────────────────────────────────────────────────────────── */
+
+.density-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.1);
+  transition: background 0.22s;
+  outline-offset: 3px;
+}
+
+.density-switch:focus-visible {
+  outline: 2px solid rgba(100, 180, 255, 0.7);
+}
+
+.density-widget--on .density-switch {
+  background: rgba(80, 160, 255, 0.75);
+  box-shadow: 0 0 8px rgba(80, 160, 255, 0.4);
+}
+
+.density-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.density-widget--on .density-thumb {
+  transform: translateX(16px);
+}
+
+/* ─── Legend (visible only when enabled) ────────────────────────────────── */
+
+.density-legend {
+  margin-top: 0;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              margin-top 0.28s,
+              opacity 0.22s;
+}
+
+.density-widget--on .density-legend {
+  max-height: 60px;
+  margin-top: 12px;
+  opacity: 1;
+}
+
+.density-legend-bar {
+  height: 7px;
+  border-radius: 4px;
+  background: linear-gradient(
+    to right,
+    rgba(20,  40, 165, 1),
+    rgba(0,  155, 225, 1),
+    rgba(0,  200, 100, 1),
+    rgba(255, 210,  0, 1),
+    rgba(255,  90,  0, 1),
+    rgba(210,   0, 20, 1)
+  );
+  box-shadow: 0 0 6px rgba(255, 120, 0, 0.25);
+}
+
+.density-legend-endpoints,
+.density-legend-values {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+  font-size: 10px;
+  color: #5a6a80;
+  letter-spacing: 0.03em;
+}
+
+.density-legend-values {
+  margin-top: 3px;
+}

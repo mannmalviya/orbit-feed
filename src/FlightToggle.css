@@ -1,0 +1,220 @@
+/* ─── Container ─────────────────────────────────────────────────────────── */
+
+.flight-widget {
+  background: rgba(10, 14, 26, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  padding: 12px 16px;
+  min-width: 210px;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.flight-widget--on {
+  border-color: rgba(80, 220, 255, 0.22);
+  background: rgba(10, 14, 26, 0.9);
+}
+
+/* ─── Toggle row ─────────────────────────────────────────────────────────── */
+
+.flight-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.flight-label-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.flight-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a9ab8;
+  transition: color 0.2s;
+  white-space: nowrap;
+}
+
+.flight-widget--on .flight-label {
+  color: #c0d4f0;
+}
+
+/* ─── Live badge ─────────────────────────────────────────────────────────── */
+
+.flight-live-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(80, 220, 255, 0.9);
+  background: rgba(80, 220, 255, 0.1);
+  border: 1px solid rgba(80, 220, 255, 0.25);
+  border-radius: 4px;
+  padding: 1px 5px 1px 4px;
+}
+
+.flight-live-dot {
+  position: relative;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(80, 220, 255, 1);
+  flex-shrink: 0;
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+.flight-live-dot::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1px solid rgba(80, 220, 255, 0.6);
+  animation: live-ring 1.6s ease-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+@keyframes live-ring {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+/* ─── Switch ─────────────────────────────────────────────────────────────── */
+
+.flight-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.1);
+  transition: background 0.22s;
+  outline-offset: 3px;
+}
+
+.flight-switch:focus-visible {
+  outline: 2px solid rgba(80, 220, 255, 0.7);
+}
+
+.flight-widget--on .flight-switch {
+  background: rgba(80, 220, 255, 0.7);
+  box-shadow: 0 0 8px rgba(80, 220, 255, 0.4);
+}
+
+.flight-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.flight-widget--on .flight-thumb {
+  transform: translateX(16px);
+}
+
+/* ─── Legend ─────────────────────────────────────────────────────────────── */
+
+.flight-legend {
+  margin-top: 0;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              margin-top 0.28s,
+              opacity 0.22s;
+}
+
+.flight-widget--on .flight-legend {
+  max-height: 60px;
+  margin-top: 12px;
+  opacity: 1;
+}
+
+.flight-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.flight-legend-row:last-child {
+  margin-bottom: 0;
+}
+
+/* Animated arc sample */
+.flight-legend-arc {
+  flex-shrink: 0;
+  width: 28px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(to right, rgba(80, 210, 255, 0.6), rgba(220, 245, 255, 0.95));
+  position: relative;
+  overflow: hidden;
+}
+
+.flight-legend-arc::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, transparent 0%, rgba(255,255,255,0.9) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: arc-shimmer 1.4s linear infinite;
+}
+
+@keyframes arc-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+/* Ring sample */
+.flight-legend-ring {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(80, 220, 255, 0.7);
+  position: relative;
+}
+
+.flight-legend-ring::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid rgba(80, 220, 255, 0.35);
+  animation: ring-expand 1.8s ease-out infinite;
+}
+
+@keyframes ring-expand {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+.flight-legend-text {
+  font-size: 10px;
+  color: #5a6a80;
+  letter-spacing: 0.03em;
+}

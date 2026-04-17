@@ -1,0 +1,102 @@
+/* ─── Container ─────────────────────────────────────────────────────────── */
+
+.planet-widget {
+  background: rgba(10, 14, 26, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  padding: 12px 16px;
+  min-width: 280px;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.planet-widget--locked {
+  border-color: rgba(200, 150, 100, 0.22);
+  background: rgba(10, 14, 26, 0.9);
+}
+
+/* ─── Header ─────────────────────────────────────────────────────────────── */
+
+.planet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.planet-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a9ab8;
+  transition: color 0.2s;
+}
+
+.planet-widget--locked .planet-label {
+  color: #d4b86a;
+}
+
+/* ─── Lock badge ─────────────────────────────────────────────────────────── */
+
+.planet-lock-badge {
+  display: flex;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(212, 184, 106, 0.9);
+  background: rgba(212, 184, 106, 0.1);
+  border: 1px solid rgba(212, 184, 106, 0.25);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+/* ─── Grid ───────────────────────────────────────────────────────────────── */
+
+.planet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+/* ─── Button ─────────────────────────────────────────────────────────────── */
+
+.planet-button {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.025em;
+  color: #8a9ab8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.planet-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #c0d4f0;
+}
+
+.planet-button:active {
+  transform: scale(0.98);
+}
+
+.planet-button--active {
+  background: rgba(212, 184, 106, 0.15);
+  border-color: rgba(212, 184, 106, 0.35);
+  color: #ead890;
+  box-shadow: 0 0 12px rgba(212, 184, 106, 0.2);
+}
+
+.planet-button--active:hover {
+  background: rgba(212, 184, 106, 0.2);
+  border-color: rgba(212, 184, 106, 0.5);
+}
