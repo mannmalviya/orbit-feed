@@ -1,0 +1,110 @@
+.cp {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(10, 14, 26, 0.75);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 999px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  user-select: none;
+}
+
+.cp-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #8899b8;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.cp-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ccd8f0;
+}
+
+.cp-btn--on {
+  background: rgba(80, 140, 255, 0.2);
+  border-color: rgba(80, 140, 255, 0.5);
+  color: #90b8ff;
+}
+
+.cp-btn--on:hover {
+  background: rgba(80, 140, 255, 0.28);
+}
+
+.cp-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.cp-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  max-width: 140px;
+  transition: max-width 0.2s ease, opacity 0.2s ease;
+  opacity: 1;
+}
+
+.cp-slider--hidden {
+  max-width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cp-label {
+  font-size: 11px;
+  color: #667a99;
+  white-space: nowrap;
+}
+
+.cp input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 80px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.cp input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #6090ee;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cp input[type='range']::-webkit-slider-thumb:hover {
+  background: #88aaff;
+}
+
+.cp input[type='range']::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #6090ee;
+  border: none;
+  cursor: pointer;
+}

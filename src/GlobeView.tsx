@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Globe, { type GlobeMethods } from 'react-globe.gl'
 import * as THREE from 'three'
-import type { SelectedCountry } from './types'
+import type { Controls, SelectedCountry } from './types'
 
 type CountryFeature = {
   type: 'Feature'
@@ -21,12 +21,18 @@ type CountriesGeoJSON = {
 
 type Props = {
   onCountryClick: (country: SelectedCountry) => void
+  controls: Controls
 }
+
+type OrbitControlsLike = { autoRotate: boolean; autoRotateSpeed: number }
 
 const COUNTRIES_URL =
   'https://raw.githubusercontent.com/vasturiano/react-globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson'
 const DAY_TEXTURE = '//unpkg.com/three-globe/example/img/earth-day.jpg'
 const NIGHT_TEXTURE = '//unpkg.com/three-globe/example/img/earth-night.jpg'
+const CLOUD_TEXTURE = '//unpkg.com/three-globe/example/img/earth-clouds.jpg'
+// Globe radius used internally by three-globe
+const GLOBE_RADIUS = 100
 
 const vertexShader = /* glsl */ `
   uniform vec3 sunDirection;
@@ -34,8 +40,6 @@ const vertexShader = /* glsl */ `
   varying float vSunDot;
   void main() {
     vUv = uv;
-    // Compare surface normal in object space with sun direction (also in object space).
-    // This keeps the terminator anchored to geography regardless of camera rotation.
     vSunDot = dot(normalize(normal), normalize(sunDirection));
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
@@ -44,14 +48,16 @@ const vertexShader = /* glsl */ `
 const fragmentShader = /* glsl */ `
   uniform sampler2D dayTexture;
   uniform sampler2D nightTexture;
+  uniform float dayNightEnabled;
   varying vec2 vUv;
   varying float vSunDot;
   void main() {
     vec4 day   = texture2D(dayTexture,   vUv);
     vec4 night = texture2D(nightTexture, vUv);
-    // Soft terminator: fully night below -0.08, fully day above +0.08
-    float blend = smoothstep(-0.08, 0.08, vSunDot);
-    gl_FragColor = mix(night, day, blend);
+    float t = dayNightEnabled > 0.5
+      ? smoothstep(-0.08, 0.08, vSunDot)
+      : 1.0;
+    gl_FragColor = mix(night, day, t);
   }
 `
 
@@ -60,23 +66,13 @@ function getDayOfYear(d: Date): number {
   return Math.floor((d.getTime() - start.getTime()) / 86_400_000)
 }
 
-/**
- * Returns the sun direction as a unit vector in three-globe's object space.
- *
- * Coordinate convention (three.js SphereGeometry with equirectangular texture):
- *   (lat=0, lng=0)   → (-1, 0, 0)   [prime meridian on the equator]
- *   (lat=90, lng=any) → (0, 1, 0)   [north pole]
- * The phi offset of +π accounts for the texture starting at lng=-180°.
- */
 function getSunDirection(date: Date): THREE.Vector3 {
   const doy = getDayOfYear(date)
   const utcH = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600
-
   const decl = ((-23.45 * Math.PI) / 180) * Math.cos((2 * Math.PI * (doy + 10)) / 365)
   const lngSun = (12 - utcH) * 15
   const phi = (lngSun * Math.PI) / 180 + Math.PI
   const theta = Math.PI / 2 - decl
-
   return new THREE.Vector3(
     Math.sin(theta) * Math.cos(phi),
     Math.cos(theta),
@@ -89,11 +85,12 @@ function countryName(f: CountryFeature): string {
   return (p.ADMIN as string) ?? p.NAME ?? p.name ?? 'Unknown'
 }
 
-type OrbitControlsLike = { autoRotate: boolean; autoRotateSpeed: number }
-
-export default function GlobeView({ onCountryClick }: Props) {
+export default function GlobeView({ onCountryClick, controls }: Props) {
   const globeRef = useRef<GlobeMethods | undefined>(undefined)
-  const cleanupRotate = useRef<(() => void) | null>(null)
+  const cleanupGlobe = useRef<(() => void) | null>(null)
+  const cloudMeshRef = useRef<THREE.Mesh | null>(null)
+  // Ref so drag-resume handler always sees current spin preference
+  const autoSpinRef = useRef(controls.autoSpin)
   const [countries, setCountries] = useState<CountryFeature[]>([])
   const [hovered, setHovered] = useState<CountryFeature | null>(null)
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight })
@@ -107,6 +104,7 @@ export default function GlobeView({ onCountryClick }: Props) {
           dayTexture: { value: null },
           nightTexture: { value: null },
           sunDirection: { value: new THREE.Vector3(1, 0, 0) },
+          dayNightEnabled: { value: 1.0 },
         },
         vertexShader,
         fragmentShader,
@@ -135,6 +133,80 @@ export default function GlobeView({ onCountryClick }: Props) {
     return () => clearInterval(id)
   }, [globeMaterial])
 
+  // ── Sync controls → scene ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    autoSpinRef.current = controls.autoSpin
+    const c = globeRef.current?.controls() as OrbitControlsLike | undefined
+    if (c) {
+      c.autoRotate = controls.autoSpin
+      c.autoRotateSpeed = controls.spinSpeed
+    }
+  }, [controls.autoSpin, controls.spinSpeed])
+
+  useEffect(() => {
+    globeMaterial.uniforms.dayNightEnabled.value = controls.showDayNight ? 1.0 : 0.0
+  }, [controls.showDayNight, globeMaterial])
+
+  useEffect(() => {
+    if (cloudMeshRef.current) cloudMeshRef.current.visible = controls.showClouds
+  }, [controls.showClouds])
+
+  // ── Globe ready: auto-rotate + cloud layer ─────────────────────────────────
+
+  function handleGlobeReady() {
+    const orbitControls = globeRef.current?.controls() as OrbitControlsLike | undefined
+    const canvas = globeRef.current?.renderer()?.domElement
+    const scene = globeRef.current?.scene()
+    if (!orbitControls || !canvas || !scene) return
+
+    // Auto-rotate
+    orbitControls.autoRotate = controls.autoSpin
+    orbitControls.autoRotateSpeed = controls.spinSpeed
+
+    const pause = () => { orbitControls.autoRotate = false }
+    const resume = () => { orbitControls.autoRotate = autoSpinRef.current }
+    canvas.addEventListener('pointerdown', pause)
+    canvas.addEventListener('pointerup', resume)
+    canvas.addEventListener('pointercancel', resume)
+
+    // Cloud layer — slightly larger sphere, semi-transparent
+    const cloudGeo = new THREE.SphereGeometry(GLOBE_RADIUS * 1.008, 75, 75)
+    const cloudMat = new THREE.MeshPhongMaterial({
+      transparent: true,
+      opacity: 0.75,
+      depthWrite: false,
+    })
+    const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat)
+    cloudMesh.visible = controls.showClouds
+    cloudMeshRef.current = cloudMesh
+    scene.add(cloudMesh)
+
+    new THREE.TextureLoader().load(CLOUD_TEXTURE, (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace
+      cloudMat.map = tex
+      cloudMat.needsUpdate = true
+    })
+
+    // Animate cloud rotation independently of the globe
+    let rafId: number
+    const animateClouds = () => {
+      cloudMesh.rotation.y += 0.0001
+      rafId = requestAnimationFrame(animateClouds)
+    }
+    rafId = requestAnimationFrame(animateClouds)
+
+    cleanupGlobe.current = () => {
+      canvas.removeEventListener('pointerdown', pause)
+      canvas.removeEventListener('pointerup', resume)
+      canvas.removeEventListener('pointercancel', resume)
+      cancelAnimationFrame(rafId)
+      scene.remove(cloudMesh)
+    }
+  }
+
+  useEffect(() => () => cleanupGlobe.current?.(), [])
+
   // ── Country polygons ───────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -161,32 +233,6 @@ export default function GlobeView({ onCountryClick }: Props) {
       f === hovered ? 'rgba(120, 180, 255, 0.6)' : 'rgba(80, 120, 200, 0.25)',
     [hovered],
   )
-
-  // ── Auto-rotate ───────────────────────────────────────────────────────────
-
-  function handleGlobeReady() {
-    const controls = globeRef.current?.controls() as OrbitControlsLike | undefined
-    const canvas = globeRef.current?.renderer()?.domElement
-    if (!controls || !canvas) return
-
-    controls.autoRotate = true
-    controls.autoRotateSpeed = 0.4
-
-    const pause = () => { controls.autoRotate = false }
-    const resume = () => { controls.autoRotate = true }
-
-    canvas.addEventListener('pointerdown', pause)
-    canvas.addEventListener('pointerup', resume)
-    canvas.addEventListener('pointercancel', resume)
-
-    cleanupRotate.current = () => {
-      canvas.removeEventListener('pointerdown', pause)
-      canvas.removeEventListener('pointerup', resume)
-      canvas.removeEventListener('pointercancel', resume)
-    }
-  }
-
-  useEffect(() => () => cleanupRotate.current?.(), [])
 
   // ── Render ─────────────────────────────────────────────────────────────────
 

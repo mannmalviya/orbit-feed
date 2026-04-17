@@ -6,11 +6,17 @@ We build this one increment at a time. Finish an increment, verify it in the bro
 
 ## Increments
 
-### Increment 3 — (next, rough)
-- Topic/category filters on the news panel.
+### Increment 3 — Control panel (in progress, branch: feat/control-panel)
+Floating top bar with four controls:
+- **Spin toggle** — pause/resume auto-rotation
+- **Speed slider** — adjust auto-spin speed (slow → fast)
+- **Day/Night toggle** — switch between live day/night shader and plain day texture
+- **Weather toggle** — show/hide a live cloud layer rendered as a semi-transparent sphere
+
+### Increment 4+ (later, rough order)
 - Country search box (fly-to on select).
 - URL state (shareable "selected country" links).
-- Visual polish: country labels, better selected-country highlight.
+- Topic/category filters on the news panel.
 - Mobile/touch polish and accessibility pass.
 - Tests once there's non-trivial logic worth pinning down.
 
@@ -24,6 +30,7 @@ Draggable 3D globe with country polygons; hover highlights, click logs name to c
 - Clicking a country opens a right-side panel that fetches top headlines from NewsAPI.org.
 - Panel shows headline, source, relative publish time, links out to article.
 - API key read from `VITE_NEWS_API_KEY` in `.env.local`; graceful error states for missing key, unsupported regions, and CORS blocks.
+- Globe auto-spins gently; pauses on drag, resumes on release.
 
 ## How to update this file
 Whenever an increment is completed, move it to the "Done" section with the date and a one-line note on what shipped. Keep the next increment concrete; leave later ones rough.
