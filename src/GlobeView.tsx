@@ -1,16 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Globe, { type GlobeMethods } from 'react-globe.gl'
 import * as THREE from 'three'
+import type { SelectedCountry } from './types'
 
 type CountryFeature = {
   type: 'Feature'
-  properties: Record<string, unknown> & { NAME?: string; name?: string; ADMIN?: string }
+  properties: Record<string, unknown> & {
+    NAME?: string
+    name?: string
+    ADMIN?: string
+    ISO_A2?: string
+  }
   geometry: unknown
 }
 
 type CountriesGeoJSON = {
   type: 'FeatureCollection'
   features: CountryFeature[]
+}
+
+type Props = {
+  onCountryClick: (country: SelectedCountry) => void
 }
 
 const COUNTRIES_URL =
@@ -62,10 +72,10 @@ function getSunDirection(date: Date): THREE.Vector3 {
   const doy = getDayOfYear(date)
   const utcH = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600
 
-  const decl = (-23.45 * Math.PI) / 180 * Math.cos((2 * Math.PI * (doy + 10)) / 365)
-  const lngSun = (12 - utcH) * 15 // degrees
-  const phi = (lngSun * Math.PI) / 180 + Math.PI // object-space offset
-  const theta = Math.PI / 2 - decl // polar angle from Y axis
+  const decl = ((-23.45 * Math.PI) / 180) * Math.cos((2 * Math.PI * (doy + 10)) / 365)
+  const lngSun = (12 - utcH) * 15
+  const phi = (lngSun * Math.PI) / 180 + Math.PI
+  const theta = Math.PI / 2 - decl
 
   return new THREE.Vector3(
     Math.sin(theta) * Math.cos(phi),
@@ -79,8 +89,11 @@ function countryName(f: CountryFeature): string {
   return (p.ADMIN as string) ?? p.NAME ?? p.name ?? 'Unknown'
 }
 
-export default function GlobeView() {
+type OrbitControlsLike = { autoRotate: boolean; autoRotateSpeed: number }
+
+export default function GlobeView({ onCountryClick }: Props) {
   const globeRef = useRef<GlobeMethods | undefined>(undefined)
+  const cleanupRotate = useRef<(() => void) | null>(null)
   const [countries, setCountries] = useState<CountryFeature[]>([])
   const [hovered, setHovered] = useState<CountryFeature | null>(null)
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight })
@@ -149,6 +162,32 @@ export default function GlobeView() {
     [hovered],
   )
 
+  // ── Auto-rotate ───────────────────────────────────────────────────────────
+
+  function handleGlobeReady() {
+    const controls = globeRef.current?.controls() as OrbitControlsLike | undefined
+    const canvas = globeRef.current?.renderer()?.domElement
+    if (!controls || !canvas) return
+
+    controls.autoRotate = true
+    controls.autoRotateSpeed = 0.4
+
+    const pause = () => { controls.autoRotate = false }
+    const resume = () => { controls.autoRotate = true }
+
+    canvas.addEventListener('pointerdown', pause)
+    canvas.addEventListener('pointerup', resume)
+    canvas.addEventListener('pointercancel', resume)
+
+    cleanupRotate.current = () => {
+      canvas.removeEventListener('pointerdown', pause)
+      canvas.removeEventListener('pointerup', resume)
+      canvas.removeEventListener('pointercancel', resume)
+    }
+  }
+
+  useEffect(() => () => cleanupRotate.current?.(), [])
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -156,6 +195,7 @@ export default function GlobeView() {
       ref={globeRef}
       width={size.w}
       height={size.h}
+      onGlobeReady={handleGlobeReady}
       backgroundColor="#000010"
       globeMaterial={globeMaterial}
       atmosphereColor="lightskyblue"
@@ -171,8 +211,9 @@ export default function GlobeView() {
       }}
       onPolygonHover={(f) => setHovered((f as CountryFeature) ?? null)}
       onPolygonClick={(f) => {
-        const name = countryName(f as CountryFeature)
-        console.log('Clicked country:', name)
+        const feature = f as CountryFeature
+        const iso2 = (feature.properties.ISO_A2 as string | undefined) ?? ''
+        onCountryClick({ name: countryName(feature), iso2 })
       }}
     />
   )
