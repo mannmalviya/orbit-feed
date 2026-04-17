@@ -6,27 +6,31 @@ We build this one increment at a time. Finish an increment, verify it in the bro
 
 ## Increments
 
-### Increment 1 — Interactive globe (in progress)
-- Scaffold Vite + React + TypeScript app.
-- Render a draggable 3D globe with country polygons (`react-globe.gl`).
-- Hover highlights the country under the cursor.
-- Clicking a country logs its name to the devtools console.
-
-**Done when:** globe renders, drag/zoom work, hover/click produce visible/console feedback, `npm run build` passes.
-
-### Increment 2 — News panel (next)
-- Side panel opens when a country is clicked.
-- Fetch top news for that country from a news API.
-- Show headline, source, publish time, link out to article.
-- Decide on API (NewsAPI / GDELT / GNews / other) and key handling via `.env.local`.
-
-### Increment 3+ (later, rough order)
+### Increment 3 — (next, rough)
 - Topic/category filters on the news panel.
 - Country search box (fly-to on select).
 - URL state (shareable "selected country" links).
-- Visual polish: atmosphere, country labels, better hover/selected states.
+- Visual polish: country labels, better selected-country highlight.
 - Mobile/touch polish and accessibility pass.
 - Tests once there's non-trivial logic worth pinning down.
 
+## Done
+
+### Increment 1 — Interactive globe (2026-04-16)
+Draggable 3D globe with country polygons; hover highlights, click logs name to console.
+
+### Increment 2 — Live day/night + news panel (2026-04-16)
+- GLSL shader blends day/night earth textures based on real-time sun position (updates every second).
+- Clicking a country opens a right-side panel that fetches top headlines from NewsAPI.org.
+- Panel shows headline, source, relative publish time, links out to article.
+- API key read from `VITE_NEWS_API_KEY` in `.env.local`; graceful error states for missing key, unsupported regions, and CORS blocks.
+
 ## How to update this file
-Whenever an increment is completed, move it to a "Done" section with the date and a one-line note on what shipped. Keep the next increment concrete; leave later ones rough.
+Whenever an increment is completed, move it to the "Done" section with the date and a one-line note on what shipped. Keep the next increment concrete; leave later ones rough.
+
+## Setup note — news API
+Add to `.env.local` (not committed):
+```
+VITE_NEWS_API_KEY=your_key_here
+```
+Get a free key at https://newsapi.org. The free tier works from localhost only.
