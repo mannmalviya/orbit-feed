@@ -45,16 +45,14 @@ export default function NewsPanel({ country, onClose }: Props) {
       setState({ kind: 'error', message: 'no-key' })
       return
     }
-    if (!country.iso2 || country.iso2 === '-99' || country.iso2.length !== 2) {
-      setState({ kind: 'error', message: 'no-code' })
-      return
-    }
 
     setState({ kind: 'loading' })
     let cancelled = false
 
+    // /everything?q= works for any country name; /top-headlines?country= only
+    // supports ~55 country codes so many valid clicks would return zero results.
     fetch(
-      `https://newsapi.org/v2/top-headlines?country=${country.iso2.toLowerCase()}&apiKey=${API_KEY}&pageSize=10`,
+      `https://newsapi.org/v2/everything?q=${encodeURIComponent(country.name)}&sortBy=publishedAt&pageSize=10&apiKey=${API_KEY}`,
     )
       .then((r) => {
         if (r.status === 426) throw new Error('cors-block')
@@ -113,10 +111,6 @@ export default function NewsPanel({ country, onClose }: Props) {
           </p>
         )}
 
-        {state.kind === 'error' && state.message === 'no-code' && (
-          <p className="news-empty">No news available for this region.</p>
-        )}
-
         {state.kind === 'error' && state.message === 'cors-block' && (
           <p className="news-empty">
             NewsAPI blocks browser requests from non-localhost origins on the free tier. Run the app
@@ -125,7 +119,7 @@ export default function NewsPanel({ country, onClose }: Props) {
         )}
 
         {state.kind === 'error' &&
-          !['no-key', 'no-code', 'cors-block'].includes(state.message) && (
+          !['no-key', 'cors-block'].includes(state.message) && (
             <p className="news-empty">Could not load news ({state.message}).</p>
           )}
 
