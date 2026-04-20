@@ -28,6 +28,10 @@ type Props = {
   showDensity: boolean
   showFlights: boolean
   lockedPlanet: PlanetName | null
+  searchRequest: { token: number; query: string } | null
+  onSearchResolved: (
+    status: { kind: 'found'; name: string } | { kind: 'not-found'; query: string },
+  ) => void
 }
 
 type ArcDatum = {
@@ -112,6 +116,41 @@ function countryName(f: CountryFeature): string {
   return (p.ADMIN as string) ?? p.NAME ?? p.name ?? 'Unknown'
 }
 
+function normalizeName(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function collectLngLatPairs(node: unknown, out: [number, number][]): void {
+  if (!Array.isArray(node)) return
+  if (typeof node[0] === 'number' && typeof node[1] === 'number') {
+    out.push([node[0], node[1]])
+    return
+  }
+  for (const child of node) collectLngLatPairs(child, out)
+}
+
+function featureCenter(feature: CountryFeature): { lat: number; lng: number } | null {
+  const coords: [number, number][] = []
+  const geometry = feature.geometry as { coordinates?: unknown } | null
+  collectLngLatPairs(geometry?.coordinates, coords)
+  if (!coords.length) return null
+
+  let latSum = 0
+  let lngSum = 0
+  for (const [lng, lat] of coords) {
+    lngSum += lng
+    latSum += lat
+  }
+
+  return { lat: latSum / coords.length, lng: lngSum / coords.length }
+}
+
 type OrbitControlsLike = {
   autoRotate: boolean
   autoRotateSpeed: number
@@ -130,13 +169,22 @@ const ARC_COLORS: [string, string] = [
 // Ring colour function: bright cyan fading to transparent as ring expands
 const ringColor = () => (t: number) => `rgba(80, 220, 255, ${Math.max(0, 1 - t * 1.4)})`
 
-export default function GlobeView({ onCountryClick, showDensity, showFlights, lockedPlanet }: Props) {
-  const globeRef        = useRef<GlobeMethods | undefined>(undefined)
-  const cleanupRotate   = useRef<(() => void) | null>(null)
-  const solarSystemRef  = useRef<SolarSystemHandle | null>(null)
+export default function GlobeView({
+  onCountryClick,
+  showDensity,
+  showFlights,
+  lockedPlanet,
+  searchRequest,
+  onSearchResolved,
+}: Props) {
+  const globeRef = useRef<GlobeMethods | undefined>(undefined)
+  const cleanupRotate = useRef<(() => void) | null>(null)
+  const solarSystemRef = useRef<SolarSystemHandle | null>(null)
+  const lastSearchToken = useRef<number>(-1)
   const [globeReady, setGlobeReady] = useState(false)
   const [countries, setCountries] = useState<CountryFeature[]>([])
   const [hovered, setHovered] = useState<CountryFeature | null>(null)
+  const [focused, setFocused] = useState<CountryFeature | null>(null)
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight })
 
   // ── Day/Night shader material ──────────────────────────────────────────────
@@ -206,9 +254,11 @@ export default function GlobeView({ onCountryClick, showDensity, showFlights, lo
           ? densityColor(iso2, 1.0)
           : densityColor(iso2, 0.78)
       }
-      return f === hovered ? 'rgba(120, 180, 255, 0.6)' : 'rgba(80, 120, 200, 0.25)'
+      if (f === focused) return 'rgba(253, 224, 71, 0.8)'
+      if (f === hovered) return 'rgba(120, 180, 255, 0.6)'
+      return 'rgba(80, 120, 200, 0.25)'
     },
-    [hovered, showDensity],
+    [focused, hovered, showDensity],
   )
 
   const polygonAlt = useMemo(
@@ -216,9 +266,11 @@ export default function GlobeView({ onCountryClick, showDensity, showFlights, lo
       const feature = f as CountryFeature
       const iso2 = (feature.properties.ISO_A2 as string | undefined) ?? ''
       const base = showDensity ? densityAltitude(iso2) : 0.006
-      return f === hovered ? base + 0.02 : base
+      if (f === focused) return base + 0.03
+      if (f === hovered) return base + 0.02
+      return base
     },
-    [hovered, showDensity],
+    [focused, hovered, showDensity],
   )
 
   // ── Flight arcs & airport rings ───────────────────────────────────────────
@@ -331,7 +383,7 @@ export default function GlobeView({ onCountryClick, showDensity, showFlights, lo
 
       // Position camera at a fixed distance from origin, looking toward the planet
       const cameraPos = new THREE.Vector3(0, 0, cameraDistance)
-      
+
       // Look at the planet
       controls.target.copy(planetPos)
       camera.position.copy(cameraPos)
@@ -369,12 +421,54 @@ export default function GlobeView({ onCountryClick, showDensity, showFlights, lo
     // Reset to Earth-centered view with auto-rotate re-enabled
     const controls = maybeControls as OrbitControlsLike
     const camera = maybeCamera as THREE.PerspectiveCamera
-    
+
     controls.target.set(0, 0, 0)
     camera.position.set(0, 0, 150)
     controls.autoRotate = true
     controls.update()
   }, [lockedPlanet])
+
+  useEffect(() => {
+    if (!searchRequest || !countries.length) return
+    if (searchRequest.token === lastSearchToken.current) return
+
+    lastSearchToken.current = searchRequest.token
+    const query = normalizeName(searchRequest.query)
+    if (!query) {
+      onSearchResolved({ kind: 'not-found', query: searchRequest.query })
+      return
+    }
+
+    const ranked = countries.map((feature) => {
+      const name = countryName(feature)
+      const n = normalizeName(name)
+      const score =
+        n === query ? 3 :
+        n.startsWith(query) ? 2 :
+        n.includes(query) || query.includes(n) ? 1 : 0
+      return { feature, name, score }
+    })
+
+    const best = ranked
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score || a.name.length - b.name.length)[0]
+
+    if (!best) {
+      setFocused(null)
+      onSearchResolved({ kind: 'not-found', query: searchRequest.query })
+      return
+    }
+
+    setFocused(best.feature)
+    setHovered(null)
+
+    const center = featureCenter(best.feature)
+    if (center) {
+      globeRef.current?.pointOfView({ lat: center.lat, lng: center.lng, altitude: 1.8 }, 1200)
+    }
+
+    onSearchResolved({ kind: 'found', name: best.name })
+  }, [countries, onSearchResolved, searchRequest])
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -395,11 +489,12 @@ export default function GlobeView({ onCountryClick, showDensity, showFlights, lo
       polygonStrokeColor={() => '#111'}
       polygonLabel={(f: object) => {
         const name = countryName(f as CountryFeature)
-        return `<div style="background:#111;padding:4px 8px;border-radius:4px;color:#eee;font-size:12px">${name}</div>`
+        return `<div style="font-family:DM Sans,system-ui,sans-serif;padding:8px 12px;border-radius:10px;font-size:12px;font-weight:600;color:#f1f5f9;background:rgba(15,23,42,0.92);border:1px solid rgba(56,189,248,0.25);box-shadow:0 8px 28px rgba(0,0,0,0.45);letter-spacing:-0.02em">${name}</div>`
       }}
       onPolygonHover={(f) => setHovered((f as CountryFeature) ?? null)}
       onPolygonClick={(f) => {
         const feature = f as CountryFeature
+        setFocused(feature)
         const iso2 = (feature.properties.ISO_A2 as string | undefined) ?? ''
         onCountryClick({ name: countryName(feature), iso2 })
       }}

@@ -1,6 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { SelectedCountry } from './types'
 import './NewsPanel.css'
+
+function ExternalIcon() {
+  return (
+    <svg className="news-external" width="14" height="14" viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="currentColor"
+        d="M18 19H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5a1 1 0 0 1 0 2H7v10h10v-4a1 1 0 0 1 2 0v5a1 1 0 0 1-1 1ZM14 4a1 1 0 0 1 1-1h5v5a1 1 0 0 1-2 0V6.41l-9.3 9.29a1 1 0 0 1-1.42-1.42L17.59 5H15a1 1 0 0 1-1-1Z"
+      />
+    </svg>
+  )
+}
 
 type Article = {
   title: string
@@ -26,6 +37,7 @@ const API_KEY = import.meta.env.VITE_NEWS_API_KEY
 
 function relativeTime(iso: string): string {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000
+  if (diff < 60) return 'Just now'
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
   if (diff < 86_400) return `${Math.floor(diff / 3600)}h ago`
   return `${Math.floor(diff / 86_400)}d ago`
@@ -38,6 +50,19 @@ type Props = {
 
 export default function NewsPanel({ country, onClose }: Props) {
   const [state, setState] = useState<FetchState>({ kind: 'idle' })
+  const closeRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    closeRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   useEffect(() => {
     // iso2 of "-99" means the GeoJSON feature has no valid country code
@@ -80,11 +105,25 @@ export default function NewsPanel({ country, onClose }: Props) {
   }, [country])
 
   return (
-    <div className="news-panel">
+    <div
+      className="news-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="news-panel-country-title"
+    >
       <div className="news-panel-header">
-        <h2>{country.name}</h2>
-        <button className="news-panel-close" onClick={onClose} aria-label="Close">
-          ✕
+        <div className="news-panel-title-block">
+          <h2 id="news-panel-country-title">{country.name}</h2>
+          <p className="news-panel-sub">Headlines</p>
+        </div>
+        <button
+          ref={closeRef}
+          type="button"
+          className="news-panel-close"
+          onClick={onClose}
+          aria-label="Close news panel"
+        >
+          ×
         </button>
       </div>
 
@@ -127,24 +166,32 @@ export default function NewsPanel({ country, onClose }: Props) {
           <p className="news-empty">No headlines found for {country.name}.</p>
         )}
 
-        {state.kind === 'ok' &&
-          state.articles.map((article, i) => (
-            <a
-              key={i}
-              className="news-article"
-              href={article.url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <span className="news-meta">
-                {article.source.name} · {relativeTime(article.publishedAt)}
-              </span>
-              <span className="news-title">{article.title}</span>
-              {article.description && (
-                <span className="news-description">{article.description}</span>
-              )}
-            </a>
-          ))}
+        {state.kind === 'ok' && state.articles.length > 0 && (
+          <div className="news-articles">
+            {state.articles.map((article, i) => (
+              <a
+                key={i}
+                className="news-article"
+                href={article.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <div className="news-meta-row">
+                  <span className="news-meta">
+                    {article.source.name} · {relativeTime(article.publishedAt)}
+                  </span>
+                  <ExternalIcon />
+                </div>
+                <div className="news-title-row">
+                  <span className="news-title">{article.title}</span>
+                </div>
+                {article.description && (
+                  <span className="news-description">{article.description}</span>
+                )}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
